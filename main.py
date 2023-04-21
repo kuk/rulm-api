@@ -66,7 +66,7 @@ def llama_tokenize(ctx, text, add_bos=True):
     )
     if size < 0:
         raise LlamaError(f'|tokens| > n_ctx={n_ctx}')
-    return tokens[:size]
+    return n_ctx, tokens[:size]
 
 
 def llama_token_text(ctx, token):
@@ -115,7 +115,7 @@ def llama_complete(
         n_predict=16, top_k=40, top_p=0.95, temp=0.8,
         repeat_penalty=1.1, repeat_last_n=64,
 ):
-        tokens = llama_tokenize(ctx, prompt)
+        n_ctx, tokens = llama_tokenize(ctx, prompt)
         n_tokens = len(tokens)
         if n_tokens + n_predict > n_ctx:
             raise LlamaError(f'n_tokens={n_tokens} + n_predict={n_predict} > n_ctx={n_ctx}')
