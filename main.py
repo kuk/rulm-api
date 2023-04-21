@@ -225,6 +225,11 @@ MODEL_TEMPLATES = {
 }
 
 
+async def models_handler(request):
+    data = list(MODEL_PARAMS)
+    return web.json_response(data)
+
+
 async def stream_sent(response, data):
     text = json.dumps(data)
     bytes = str_bytes(text)
@@ -278,7 +283,8 @@ async def complete(request):
 def main():
     app = web.Application()
     app.add_routes([
-        web.post('/complete', complete)
+        web.get('/v1/models', models_handler),
+        web.post('/v1/complete', complete_handler)
     ])
     web.run_app(app, host=HOST, port=PORT)
 
