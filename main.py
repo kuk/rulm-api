@@ -174,25 +174,29 @@ MODEL_PARAMS = {
         'path': f'{MODELS_DIR}/saiga_llamacpp/7B/ggml-model-f16.bin',
         'n_ctx': 2000,
         'n_batch': 16,
-        'n_threads': 16
+        'n_threads': 16,
+        'stop_pattern': '<end>'
     },
     'saiga-7b-q4': {
         'path': f'{MODELS_DIR}/saiga_llamacpp/7B/ggml-model-q4.bin',
         'n_ctx': 2000,
         'n_batch': 16,
-        'n_threads': 16
+        'n_threads': 16,
+        'stop_pattern': '<end>'
     },
     'saiga-7b-v2-f16': {
         'path': f'{MODELS_DIR}/saiga_v2_llamacpp/7B/ggml-model-f16.bin',
         'n_ctx': 2000,
         'n_batch': 16,
-        'n_threads': 16
+        'n_threads': 16,
+        'stop_pattern': '</s>'
     },
     'saiga-7b-v2-q4': {
         'path': f'{MODELS_DIR}/saiga_v2_llamacpp/7B/ggml-model-q4.bin',
         'n_ctx': 2000,
         'n_batch': 16,
-        'n_threads': 16
+        'n_threads': 16,
+        'stop_pattern': '</s>'
     },
 }
 
@@ -237,7 +241,18 @@ async def stream_sent(response, data):
     await response.write(bytes + b'\r\n')
 
 
-async def complete(request):
+def complete_until_match(records, pattern):
+    text = ''
+    for record in records:
+        yield record
+
+        if record.text:
+            text += record.text
+            if pattern in text:
+                break
+
+
+async def complete_handler(request):
     data = await request.json()
     prompt = data['prompt']
     model = data['model']
@@ -266,6 +281,11 @@ async def complete(request):
                 repeat_penalty=1.1,
                 repeat_last_n=64
             )
+
+            stop_pattern = model_params.get('stop_pattern')
+            if stop_pattern:
+                records = complete_until_match(records, stop_pattern)
+
             for record in records:
                 item = {
                     'type': 'init' if record.type == EVAL else 'generate',
