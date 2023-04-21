@@ -2,7 +2,10 @@
 import os
 import json
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import (
+    dataclass,
+    asdict
+)
 from contextlib import contextmanager
 
 from aiohttp import web
@@ -97,13 +100,8 @@ def llama_sample(ctx, top_k, top_p, temp, repeat_penalty, last_n_tokens):
     )
     
 
-EVAL = 'eval'
-SAMPLE = 'sample'
-
-
 @dataclass
 class LlamaCompleteRecord:
-    type: str
     n_past: int = None
     n_tokens: int = None
     text: str = None
@@ -128,10 +126,10 @@ def llama_complete(
             batch = tokens[n_past:n_past + n_batch]
             llama_eval(ctx, batch, n_past, n_threads)
             last_n_tokens.extend(batch)
-            yield LlamaCompleteRecord(EVAL, n_past=n_past, n_tokens=n_tokens)
+            yield LlamaCompleteRecord(n_past=n_past, n_tokens=n_tokens)
 
         n_past = n_tokens
-        yield LlamaCompleteRecord(EVAL, n_past=n_past, n_tokens=n_tokens)
+        yield LlamaCompleteRecord(n_past=n_past, n_tokens=n_tokens)
 
         for _ in range(n_predict):
             token = llama_sample(ctx, top_k, top_p, temp, repeat_penalty, last_n_tokens)
@@ -143,7 +141,7 @@ def llama_complete(
             last_n_tokens.append(token)
 
             text = llama_token_text(ctx, token)
-            yield LlamaCompleteRecord(SAMPLE, text=text)
+            yield LlamaCompleteRecord(text=text)
 
 
 #######
@@ -162,7 +160,7 @@ MODEL_PARAMS = {
         'path': f'{MODELS_DIR}/ru_alpaca_llamacpp/7B/ggml-model-f16.bin',
         'n_ctx': 256 + 512,
         'n_batch': 16,
-        'n_threads': 16
+        'n_threads': 16,
     },
     'ru-alpaca-7b-q4': {
         'path': f'{MODELS_DIR}/ru_alpaca_llamacpp/7B/ggml-model-q4.bin',
@@ -287,13 +285,7 @@ async def complete_handler(request):
                 records = complete_until_match(records, stop_pattern)
 
             for record in records:
-                item = {
-                    'type': 'init' if record.type == EVAL else 'generate',
-                    'init_done': record.n_past,
-                    'init_total': record.n_tokens,
-                    'text': record.text
-                }
-                await stream_sent(response, item)
+                await stream_sent(response, asdict(record))
                 
     except ConnectionResetError:
         pass
