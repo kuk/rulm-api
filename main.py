@@ -278,6 +278,41 @@ async def models_handler(request):
     return web.json_response(data)
 
 
+def safe_json_loads(text):
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return
+
+
+async def tokenize_handler(request):
+    text = await request.text()
+    data = safe_json_loads(text)
+    if type(data) is not dict:
+        raise web.HTTPBadRequest(text=f'{text!r}, json dict required')
+
+    text = data.get('text')
+    if type(text) is not str:
+        raise web.HTTPBadRequest(text=f'text={text!r}, str is required')
+
+    model = data.get('model')
+    if type(model) is not str:
+        raise web.HTTPBadRequest(text=f'model={model!r}, str is required')
+
+    model_params = MODEL_PARAMS.get(model)
+    if not model_params:
+        raise web.HTTPBadRequest(text=f'unknown model {model!r}')
+
+    try:
+        with llama_ctx_manager(model_params['path'], model_params['n_ctx']) as ctx:
+            tokens = llama_tokenize(ctx, text, add_bos=False)
+            return web.json_response([
+                llama_token_text(ctx, _) for _ in tokens
+            ])
+    except LlamaError as error:
+        raise web.HTTPInternalServerError(text=str(error))
+
+
 async def stream_sent(response, data):
     text = json.dumps(data)
     bytes = str_bytes(text)
@@ -343,6 +378,7 @@ def main():
     app = web.Application()
     app.add_routes([
         web.get('/v1/models', models_handler),
+        web.post('/v1/tokenize', tokenize_handler),
         web.post('/v1/complete', complete_handler)
     ])
     log('run app', host=HOST, port=PORT)
