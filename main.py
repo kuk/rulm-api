@@ -283,7 +283,7 @@ MODEL_PARAMS = {
         'n_ctx': 2000,
         'n_batch': 16,
         'n_threads': 16,
-        'template': SAIGA_TEMPLATE,
+        'template': SAIGA_TEMPLATE2,
         'stop': SAIGA_STOP2,
     },
 }
