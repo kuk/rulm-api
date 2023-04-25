@@ -129,6 +129,7 @@ def llama_sample(ctx, top_k, top_p, temp, repeat_penalty, last_n_tokens):
 class LlamaCompleteRecord:
     n_past: int = None
     n_tokens: int = None
+    token: int = None
     text: str = None
 
 
@@ -166,7 +167,27 @@ def llama_complete(
             last_n_tokens.append(token)
 
             text = llama_token_text(ctx, token)
-            yield LlamaCompleteRecord(text=text)
+            yield LlamaCompleteRecord(token=token, text=text)
+
+
+def match_stop_tokens(records, stop_tokens):
+    index = 0
+    buffer = []
+    for record in records:
+        if record.token == stop_tokens[index]:
+            if index == len(stop_tokens) - 1:
+                return
+            else:
+                index += 1
+                buffer.append(record)
+                continue
+        else:
+            index = 0
+            yield from buffer
+            buffer = []
+
+        yield record
+    yield from buffer
 
 
 #####
