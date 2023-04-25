@@ -3,6 +3,7 @@ import os
 import sys
 import json
 from collections import deque
+from datetime import datetime
 from dataclasses import (
     dataclass,
     asdict
@@ -85,7 +86,7 @@ def llama_tokenize(ctx, text, add_bos=True):
         add_bos=llama_cpp.c_bool(add_bos),
     )
     if size < 0:
-        raise LlamaError(f'|tokens| > n_ctx={n_ctx}')
+        raise LlamaError(f'n_tokens > n_ctx={n_ctx}')
     return n_ctx, tokens[:size]
 
 
@@ -159,6 +160,26 @@ def llama_complete(
 
             text = llama_token_text(ctx, token)
             yield LlamaCompleteRecord(text=text)
+
+
+#####
+#
+#   LOG
+#
+#####
+
+
+def log(message, **kwargs):
+    data = dict(
+        datetime=datetime.utcnow().isoformat(),
+        message=message,
+        **kwargs
+    )
+    print(
+        json.dumps(data, ensure_ascii=False, default=str),
+        flush=True,
+        file=sys.stderr
+    )
 
 
 #######
@@ -273,6 +294,7 @@ async def complete_handler(request):
     model = data['model']
     max_tokens = data.get('max_tokens', 16)
     temperature = data.get('temperature', 0.8)
+    log('complete', data=data)
 
     response = web.StreamResponse()
     await response.prepare(request)
@@ -316,7 +338,8 @@ def main():
         web.get('/v1/models', models_handler),
         web.post('/v1/complete', complete_handler)
     ])
-    web.run_app(app, host=HOST, port=PORT)
+    log('run app', host=HOST, port=PORT)
+    web.run_app(app, host=HOST, port=PORT, print=None)
 
 
 if __name__ == '__main__':
