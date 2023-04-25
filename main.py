@@ -62,10 +62,14 @@ def llama_ctx(path, n_ctx=256):
     params.embedding = False
 
     with suppress_stderr():
-        return llama_cpp.llama_init_from_file(
+        ctx = llama_cpp.llama_init_from_file(
             path_model=str_bytes(path),
             params=params
         )
+
+    if not ctx:
+        raise LlamaError(f'failed load {path!r}')
+    return ctx
 
 
 @contextmanager
