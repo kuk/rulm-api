@@ -84,13 +84,14 @@ def llama_ctx_manager(path, n_ctx=256):
 def llama_tokenize(ctx, text, add_bos=True):
     n_ctx = llama_cpp.llama_n_ctx(ctx)
     tokens = (llama_cpp.llama_token * n_ctx)()
-    size = llama_cpp.llama_tokenize(
-        ctx=ctx,
-        text=str_bytes(text),
-        tokens=tokens,
-        n_max_tokens=n_ctx,
-        add_bos=llama_cpp.c_bool(add_bos),
-    )
+    with suppress_stderr():
+        size = llama_cpp.llama_tokenize(
+            ctx=ctx,
+            text=str_bytes(text),
+            tokens=tokens,
+            n_max_tokens=n_ctx,
+            add_bos=llama_cpp.c_bool(add_bos),
+        )
     if size < 0:
         raise LlamaError(f'n_tokens > n_ctx={n_ctx}')
     return n_ctx, tokens[:size]
