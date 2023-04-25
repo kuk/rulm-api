@@ -75,8 +75,10 @@ def llama_ctx(path, n_ctx=256):
 @contextmanager
 def llama_ctx_manager(path, n_ctx=256):
     ctx = llama_ctx(path, n_ctx)
-    yield ctx
-    llama_cpp.llama_free(ctx)
+    try:
+        yield ctx
+    finally:
+        llama_cpp.llama_free(ctx)
 
 
 def llama_tokenize(ctx, text, add_bos=True):
