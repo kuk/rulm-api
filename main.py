@@ -1,5 +1,6 @@
 
 import os
+import sys
 import json
 from collections import deque
 from dataclasses import (
@@ -32,6 +33,21 @@ def bytes_str(bytes):
     return bytes.decode('utf8')
 
 
+@contextmanager
+def suppress_stderr():
+    stderr_fd = sys.stderr.fileno()
+    stderr_dup_fd = os.dup(stderr_fd)
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(devnull_fd, stderr_fd)
+
+    try:
+        yield
+    finally:
+        os.dup2(stderr_dup_fd, stderr_fd)
+        os.close(devnull_fd)
+        os.close(stderr_dup_fd)
+
+
 def llama_ctx(path, n_ctx=256):
     params = llama_cpp.llama_context_default_params()
     params.n_ctx = n_ctx
@@ -44,10 +60,11 @@ def llama_ctx(path, n_ctx=256):
     params.use_mlock = False
     params.embedding = False
 
-    return llama_cpp.llama_init_from_file(
-        path_model=str_bytes(path),
-        params=params
-    )
+    with suppress_stderr():
+        return llama_cpp.llama_init_from_file(
+            path_model=str_bytes(path),
+            params=params
+        )
 
 
 @contextmanager
