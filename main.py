@@ -200,49 +200,6 @@ HOST = os.getenv('HOST', 'localhost')
 PORT = int(os.getenv('PORT', 8080))
 MODELS_DIR = os.getenv('MODELS_DIR', os.path.expanduser('~/models'))
 
-MODEL_PARAMS = {
-    'ru-alpaca-7b-f16': {
-        'path': f'{MODELS_DIR}/ru_alpaca_llamacpp/7B/ggml-model-f16.bin',
-        'n_ctx': 256 + 512,
-        'n_batch': 16,
-        'n_threads': 16,
-    },
-    'ru-alpaca-7b-q4': {
-        'path': f'{MODELS_DIR}/ru_alpaca_llamacpp/7B/ggml-model-q4.bin',
-        'n_ctx': 256 + 512,
-        'n_batch': 16,
-        'n_threads': 16
-    },
-    'saiga-7b-f16': {
-        'path': f'{MODELS_DIR}/saiga_llamacpp/7B/ggml-model-f16.bin',
-        'n_ctx': 2000,
-        'n_batch': 16,
-        'n_threads': 16,
-        'stop_pattern': '<end>'
-    },
-    'saiga-7b-q4': {
-        'path': f'{MODELS_DIR}/saiga_llamacpp/7B/ggml-model-q4.bin',
-        'n_ctx': 2000,
-        'n_batch': 16,
-        'n_threads': 16,
-        'stop_pattern': '<end>'
-    },
-    'saiga-7b-v2-f16': {
-        'path': f'{MODELS_DIR}/saiga_v2_llamacpp/7B/ggml-model-f16.bin',
-        'n_ctx': 2000,
-        'n_batch': 16,
-        'n_threads': 16,
-        'stop_pattern': '</s>'
-    },
-    'saiga-7b-v2-q4': {
-        'path': f'{MODELS_DIR}/saiga_v2_llamacpp/7B/ggml-model-q4.bin',
-        'n_ctx': 2000,
-        'n_batch': 16,
-        'n_threads': 16,
-        'stop_pattern': '</s>'
-    },
-}
-
 RU_ALPACA_TEMPLATE = '''Задание: {prompt}
 Ответ: '''
 
@@ -255,6 +212,7 @@ SAIGA_TEMPLATE = '''<start>system
 {prompt} </end>
 <start>bot
 '''
+SAIGA_STOP = ' <end>'
 
 SAIGA_TEMPLATE2 = '''<s>system
 Ты — Сайга, русскоязычный автоматический ассистент. Ты разговариваешь с людьми и помогаешь им.</s>
@@ -262,15 +220,62 @@ SAIGA_TEMPLATE2 = '''<s>system
 {prompt}</s>
 <s>bot
 '''
+SAIGA_STOP2 = '</s>'
 
-MODEL_TEMPLATES = {
-    'ru-alpaca-7b-f16': RU_ALPACA_TEMPLATE,
-    'ru-alpaca-7b-q4': RU_ALPACA_TEMPLATE,
-    'saiga-7b-f16': SAIGA_TEMPLATE,
-    'saiga-7b-q4': SAIGA_TEMPLATE,
-    'saiga-7b-v2-f16': SAIGA_TEMPLATE2,
-    'saiga-7b-v2-q4': SAIGA_TEMPLATE2,
+MODEL_PARAMS = {
+    'ru-alpaca-7b-f16': {
+        'path': f'{MODELS_DIR}/ru_alpaca_llamacpp/7B/ggml-model-f16.bin',
+        'n_ctx': 256 + 512,
+        'n_batch': 16,
+        'n_threads': 16,
+        'template': RU_ALPACA_TEMPLATE,
+    },
+    'ru-alpaca-7b-q4': {
+        'path': f'{MODELS_DIR}/ru_alpaca_llamacpp/7B/ggml-model-q4.bin',
+        'n_ctx': 256 + 512,
+        'n_batch': 16,
+        'n_threads': 16,
+        'template': RU_ALPACA_TEMPLATE,
+    },
+    'saiga-7b-f16': {
+        'path': f'{MODELS_DIR}/saiga_llamacpp/7B/ggml-model-f16.bin',
+        'n_ctx': 2000,
+        'n_batch': 16,
+        'n_threads': 16,
+        'template': SAIGA_TEMPLATE,
+        'stop': SAIGA_STOP,
+    },
+    'saiga-7b-q4': {
+        'path': f'{MODELS_DIR}/saiga_llamacpp/7B/ggml-model-q4.bin',
+        'n_ctx': 2000,
+        'n_batch': 16,
+        'n_threads': 16,
+        'template': SAIGA_TEMPLATE,
+        'stop': SAIGA_STOP,
+    },
+    'saiga-7b-v2-f16': {
+        'path': f'{MODELS_DIR}/saiga_v2_llamacpp/7B/ggml-model-f16.bin',
+        'n_ctx': 2000,
+        'n_batch': 16,
+        'n_threads': 16,
+        'template': SAIGA_TEMPLATE2,
+        'stop': SAIGA_STOP2,
+    },
+    'saiga-7b-v2-q4': {
+        'path': f'{MODELS_DIR}/saiga_v2_llamacpp/7B/ggml-model-q4.bin',
+        'n_ctx': 2000,
+        'n_batch': 16,
+        'n_threads': 16,
+        'template': SAIGA_TEMPLATE,
+        'stop': SAIGA_STOP2,
+    },
 }
+
+
+def check_model_params(data):
+    for model, params in data.items():
+        assert params['n_ctx'] <= 2048
+        assert os.path.exists(params['path'])
 
 
 async def models_handler(request):
@@ -375,6 +380,8 @@ async def complete_handler(request):
     
 
 def main():
+    check_model_params(MODEL_PARAMS)
+
     app = web.Application()
     app.add_routes([
         web.get('/v1/models', models_handler),
