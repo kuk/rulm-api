@@ -134,16 +134,12 @@ class LlamaCompleteRecord:
 
 
 def llama_complete(
-        ctx, prompt,
+        ctx, tokens,
         n_batch=8, n_threads=8,
         n_predict=16, top_k=40, top_p=0.95, temp=0.8,
         repeat_penalty=1.1, repeat_last_n=64,
 ):
-        n_ctx, tokens = llama_tokenize(ctx, prompt)
         n_tokens = len(tokens)
-        if n_tokens + n_predict > n_ctx:
-            raise LlamaError(f'n_tokens={n_tokens} + n_predict={n_predict} > n_ctx={n_ctx}')
-
         last_n_tokens = deque(
             (llama_cpp.llama_token * repeat_last_n)(0),
             maxlen=repeat_last_n
@@ -345,38 +341,48 @@ async def stream_sent(response, data):
     await response.write(bytes + b'\r\n')
 
 
-def complete_until_match(records, pattern):
-    text = ''
-    for record in records:
-        yield record
-
-        if record.text:
-            text += record.text
-            if pattern in text:
-                break
-
-
 async def complete_handler(request):
-    data = await request.json()
-    prompt = data['prompt']
-    model = data['model']
-    max_tokens = data.get('max_tokens', 16)
-    temperature = data.get('temperature', 0.8)
-    log('complete', data=data)
+    text = await request.text()
+    data = safe_json_loads(text)
+    if type(data) is not dict:
+        raise web.HTTPBadRequest(text=f'{text!r}, json dict required')
+
+    prompt = data.get('prompt')
+    if type(prompt) is not str:
+        raise web.HTTPBadRequest(text=f'prompt={prompt!r}, str required')
+
+    model = data.get('model')
+    if type(model) is not str:
+        raise web.HTTPBadRequest(text=f'model={model!r}, str required')
+
+    model_params = MODEL_PARAMS.get(model)
+    if model_params is None:
+        raise web.HTTPBadRequest(text=f'unknown model {model!r}')
+
+    n_ctx = model_params['n_ctx']
+    max_tokens = data.get('max_tokens', 32)
+    if type(max_tokens) is not int or not 1 <= max_tokens <= n_ctx:
+        raise web.HTTPBadRequest(text=f'max_tokens={max_tokens!r}, int in [1, {n_ctx}] required')
+
+    temperature = data.get('temperature', 0.2)
+    if type(temperature) not in (int, float) or not 0 <= temperature <= 1:
+        raise web.HTTPBadRequest(text=f'temperature={temperature!r}, float in [0, 1] required')
+
+    log(
+        'complete start',
+        prompt=prompt, model=model,
+        max_tokens=max_tokens, temperature=temperature
+    )
 
     response = web.StreamResponse()
     await response.prepare(request)
 
-    try:
-        model_params = MODEL_PARAMS[model]
-        template = MODEL_TEMPLATES[model]
-        with llama_ctx_manager(
-                path=model_params['path'],
-                n_ctx=model_params['n_ctx']
-        ) as ctx:
-            prompt = template.format(prompt=prompt)
+    with llama_ctx_manager(model_params['path'], n_ctx) as ctx:
+        try:
+            prompt = model_params['template'].format(prompt=prompt)
+            tokens = llama_tokenize(ctx, prompt, add_bos=True)
             records = llama_complete(
-                ctx, prompt,
+                ctx, tokens,
                 n_batch=model_params['n_batch'],
                 n_threads=model_params['n_threads'],
                 n_predict=max_tokens,
@@ -386,19 +392,27 @@ async def complete_handler(request):
                 repeat_penalty=1.1,
                 repeat_last_n=64
             )
-
-            stop_pattern = model_params.get('stop_pattern')
-            if stop_pattern:
-                records = complete_until_match(records, stop_pattern)
+            
+            stop = model_params.get('stop')
+            if stop:
+                stop_tokens = llama_tokenize(ctx, stop, add_bos=False)
+                records = match_stop_tokens(records, stop_tokens)
 
             for record in records:
-                await stream_sent(response, asdict(record))
-                
-    except ConnectionResetError:
-        pass
+                if record.text:
+                    item = {'text': record.text}
+                else:
+                    item = {'prompt_progress': record.n_past / record.n_tokens}
+                await stream_sent(response, item)
+
+        except LlamaError as error:
+            await stream_sent(response, {'error': str(error)})
+
+        except ConnectionResetError:
+            pass
 
     return response
-    
+
 
 def main():
     check_model_params(MODEL_PARAMS)
