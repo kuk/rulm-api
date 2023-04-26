@@ -129,7 +129,6 @@ def llama_sample(ctx, top_k, top_p, temp, repeat_penalty, last_n_tokens):
 class LlamaCompleteRecord:
     n_past: int = None
     n_tokens: int = None
-    token: int = None
     text: str = None
 
 
@@ -163,26 +162,33 @@ def llama_complete(
             last_n_tokens.append(token)
 
             text = llama_token_text(ctx, token)
-            yield LlamaCompleteRecord(token=token, text=text)
+            yield LlamaCompleteRecord(text=text)
 
 
-def match_stop_tokens(records, stop_tokens):
-    index = 0
-    buffer = []
+def match_stop(records, stop, buffer_size=4):
+    buffer = deque()
+    text = ''
+
     for record in records:
-        if record.token == stop_tokens[index]:
-            if index == len(stop_tokens) - 1:
-                return
-            else:
-                index += 1
-                buffer.append(record)
-                continue
-        else:
-            index = 0
-            yield from buffer
-            buffer = []
+        if not record.text:
+            yield record
+            continue
 
-        yield record
+        buffer.append(record)
+        text += record.text
+
+        index = text.find(stop)
+        if index >= 0:
+            text = text[:index]
+            if text:
+                yield LlamaCompleteRecord(text=text)
+            return
+
+        if len(buffer) >= buffer_size:
+            record = buffer.popleft()
+            text = text[len(record.text):]
+            yield record
+
     yield from buffer
 
 
@@ -395,8 +401,7 @@ async def complete_handler(request):
             
             stop = model_params.get('stop')
             if stop:
-                stop_tokens = llama_tokenize(ctx, stop, add_bos=False)
-                records = match_stop_tokens(records, stop_tokens)
+                records = match_stop(records, stop)
 
             for record in records:
                 if record.text:
