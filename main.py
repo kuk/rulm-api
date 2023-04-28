@@ -272,15 +272,15 @@ MODEL_PARAMS = {
     'saiga-13b-q4': {
         'path': f'{MODELS_DIR}/saiga_13b/ggml-model-q4_1.bin',
         'n_ctx': 2000,
-        'n_batch': 32,
-        'n_threads': 32,
+        'n_batch': 16,
+        'n_threads': 24,
         'template': SAIGA_TEMPLATE2,
         'stop': SAIGA_STOP2,
     },
     'saiga-30b-q4': {
         'path': f'{MODELS_DIR}/saiga_30b/ggml-model-q4_1.bin',
         'n_ctx': 2000,
-        'n_batch': 32,
+        'n_batch': 16,
         'n_threads': 32,
         'template': SAIGA_TEMPLATE2,
         'stop': SAIGA_STOP2,
