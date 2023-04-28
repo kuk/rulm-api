@@ -246,49 +246,42 @@ SAIGA_TEMPLATE2 = '''<s>system
 SAIGA_STOP2 = '</s>'
 
 MODEL_PARAMS = {
-    'ru-alpaca-7b-f16': {
-        'path': f'{MODELS_DIR}/ru_alpaca_llamacpp/7B/ggml-model-f16.bin',
-        'n_ctx': 256 + 512,
-        'n_batch': 16,
-        'n_threads': 16,
-        'template': RU_ALPACA_TEMPLATE,
-    },
     'ru-alpaca-7b-q4': {
-        'path': f'{MODELS_DIR}/ru_alpaca_llamacpp/7B/ggml-model-q4.bin',
+        'path': f'{MODELS_DIR}/ru_alpaca_7b/ggml-model-q4_0.bin',
         'n_ctx': 256 + 512,
         'n_batch': 16,
         'n_threads': 16,
         'template': RU_ALPACA_TEMPLATE,
-    },
-    'saiga-7b-f16': {
-        'path': f'{MODELS_DIR}/saiga_llamacpp/7B/ggml-model-f16.bin',
-        'n_ctx': 2000,
-        'n_batch': 16,
-        'n_threads': 16,
-        'template': SAIGA_TEMPLATE,
-        'stop': SAIGA_STOP,
     },
     'saiga-7b-q4': {
-        'path': f'{MODELS_DIR}/saiga_llamacpp/7B/ggml-model-q4.bin',
+        'path': f'{MODELS_DIR}/saiga_7b/ggml-model-q4_0.bin',
         'n_ctx': 2000,
         'n_batch': 16,
         'n_threads': 16,
         'template': SAIGA_TEMPLATE,
         'stop': SAIGA_STOP,
     },
-    'saiga-7b-v2-f16': {
-        'path': f'{MODELS_DIR}/saiga_v2_llamacpp/7B/ggml-model-f16.bin',
+    'saiga-7b-v2-q4': {
+        'path': f'{MODELS_DIR}/saiga_7b_v2/ggml-model-q4_0.bin',
         'n_ctx': 2000,
         'n_batch': 16,
         'n_threads': 16,
         'template': SAIGA_TEMPLATE2,
         'stop': SAIGA_STOP2,
     },
-    'saiga-7b-v2-q4': {
-        'path': f'{MODELS_DIR}/saiga_v2_llamacpp/7B/ggml-model-q4.bin',
+    'saiga-13b-q4': {
+        'path': f'{MODELS_DIR}/saiga_13b/ggml-model-q4_1.bin',
         'n_ctx': 2000,
-        'n_batch': 16,
-        'n_threads': 16,
+        'n_batch': 32,
+        'n_threads': 32,
+        'template': SAIGA_TEMPLATE2,
+        'stop': SAIGA_STOP2,
+    },
+    'saiga-30b-q4': {
+        'path': f'{MODELS_DIR}/saiga_30b/ggml-model-q4_1.bin',
+        'n_ctx': 2000,
+        'n_batch': 32,
+        'n_threads': 32,
         'template': SAIGA_TEMPLATE2,
         'stop': SAIGA_STOP2,
     },
