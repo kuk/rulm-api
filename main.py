@@ -81,7 +81,7 @@ def llama_ctx_manager(path, n_ctx=256):
         llama_cpp.llama_free(ctx)
 
 
-def llama_tokenize(ctx, text, add_bos=True):
+def llama_tokenize(ctx, text, add_bos=False):
     n_ctx = llama_cpp.llama_n_ctx(ctx)
     tokens = (llama_cpp.llama_token * n_ctx)()
     with suppress_stderr():
@@ -192,6 +192,33 @@ def match_stop(records, stop, buffer_size=4):
     yield from buffer
 
 
+####
+#
+#  SAIGA
+#
+####
+
+# <s>system
+# Ты — Сайга, русскоязычный...</s>
+# <s>user
+# {prompt}</s>
+# <s>bot
+
+
+SAIGA_SYSTEM = 'Ты — Сайга, русскоязычный автоматический ассистент. Ты разговариваешь с людьми и помогаешь им.'
+SAIGA_SYSTEM_TOKENS = [30041, 29982, 813, 5212, 29977, 1779, 29892, 14251, 1130, 29970, 4536, 19705, 10279, 24522, 2542, 1097, 6988, 464, 3648, 29889, 1703, 29982, 3212, 29969, 1263, 641, 846, 29919, 25366, 531, 6331, 10826, 989, 606, 14752, 1779, 29919, 25366, 8933, 29889]
+BOS_TOKEN, EOS_TOKEN, NL_TOKEN = [1, 2, 13]
+SYSTEM_TOKEN, USER_TOKEN, BOT_TOKEN = [1788, 1404, 9225]
+
+
+def saiga_prompt_tokens(user_tokens):
+    yield from [BOS_TOKEN, SYSTEM_TOKEN, NL_TOKEN]
+    yield from SAIGA_SYSTEM_TOKENS + [EOS_TOKEN, NL_TOKEN]
+    yield from [BOS_TOKEN, USER_TOKEN, NL_TOKEN]
+    yield from user_tokens + [EOS_TOKEN, NL_TOKEN]
+    yield from [BOS_TOKEN, BOT_TOKEN, NL_TOKEN]
+
+
 #####
 #
 #   LOG
@@ -223,67 +250,24 @@ HOST = os.getenv('HOST', 'localhost')
 PORT = int(os.getenv('PORT', 8080))
 MODELS_DIR = os.getenv('MODELS_DIR', os.path.expanduser('~/models'))
 
-RU_ALPACA_TEMPLATE = '''Задание: {prompt}
-Ответ: '''
-
-RU_ALPACA_TEMPLATE2 = '''### Задание: {prompt}
-### Ответ: '''
-
-SAIGA_TEMPLATE = '''<start>system
-Ты — Сайга, русскоязычный автоматический ассистент. Ты разговариваешь с людьми и помогаешь им. </end>
-<start>user
-{prompt} </end>
-<start>bot
-'''
-SAIGA_STOP = ' <end>'
-
-SAIGA_TEMPLATE2 = '''<s>system
-Ты — Сайга, русскоязычный автоматический ассистент. Ты разговариваешь с людьми и помогаешь им.</s>
-<s>user
-{prompt}</s>
-<s>bot
-'''
-SAIGA_STOP2 = '</s>'
-
 MODEL_PARAMS = {
-    'ru-alpaca-7b-q4': {
-        'path': f'{MODELS_DIR}/ru_alpaca_7b/ggml-model-q4_0.bin',
-        'n_ctx': 256 + 512,
-        'n_batch': 16,
-        'n_threads': 16,
-        'template': RU_ALPACA_TEMPLATE,
-    },
     'saiga-7b-q4': {
-        'path': f'{MODELS_DIR}/saiga_7b/ggml-model-q4_0.bin',
-        'n_ctx': 2000,
-        'n_batch': 16,
-        'n_threads': 16,
-        'template': SAIGA_TEMPLATE,
-        'stop': SAIGA_STOP,
-    },
-    'saiga-7b-v2-q4': {
         'path': f'{MODELS_DIR}/saiga_7b_v2/ggml-model-q4_0.bin',
         'n_ctx': 2000,
         'n_batch': 16,
         'n_threads': 16,
-        'template': SAIGA_TEMPLATE2,
-        'stop': SAIGA_STOP2,
     },
     'saiga-13b-q4': {
         'path': f'{MODELS_DIR}/saiga_13b/ggml-model-q4_1.bin',
         'n_ctx': 2000,
         'n_batch': 16,
         'n_threads': 24,
-        'template': SAIGA_TEMPLATE2,
-        'stop': SAIGA_STOP2,
     },
     'saiga-30b-q4': {
         'path': f'{MODELS_DIR}/saiga_30b/ggml-model-q4_1.bin',
         'n_ctx': 2000,
         'n_batch': 16,
         'n_threads': 32,
-        'template': SAIGA_TEMPLATE2,
-        'stop': SAIGA_STOP2,
     },
 }
 
@@ -326,7 +310,7 @@ async def tokenize_handler(request):
 
     try:
         with llama_ctx_manager(model_params['path'], model_params['n_ctx']) as ctx:
-            tokens = llama_tokenize(ctx, text, add_bos=False)
+            tokens = llama_tokenize(ctx, text)
             return web.json_response([
                 llama_token_text(ctx, _) for _ in tokens
             ])
@@ -378,8 +362,8 @@ async def complete_handler(request):
 
     with llama_ctx_manager(model_params['path'], n_ctx) as ctx:
         try:
-            prompt = model_params['template'].format(prompt=prompt)
-            tokens = llama_tokenize(ctx, prompt, add_bos=True)
+            tokens = llama_tokenize(ctx, prompt)
+            tokens = list(saiga_prompt_tokens(tokens))
             records = llama_complete(
                 ctx, tokens,
                 n_batch=model_params['n_batch'],
