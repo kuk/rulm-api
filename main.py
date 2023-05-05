@@ -211,11 +211,18 @@ BOS_TOKEN, EOS_TOKEN, NL_TOKEN = [1, 2, 13]
 SYSTEM_TOKEN, USER_TOKEN, BOT_TOKEN = [1788, 1404, 9225]
 
 
-def saiga_prompt_tokens(user_tokens):
-    yield from [BOS_TOKEN, SYSTEM_TOKEN, NL_TOKEN]
-    yield from SAIGA_SYSTEM_TOKENS + [EOS_TOKEN, NL_TOKEN]
-    yield from [BOS_TOKEN, USER_TOKEN, NL_TOKEN]
-    yield from user_tokens + [EOS_TOKEN, NL_TOKEN]
+def saiga_prompt_tokens(messages_tokens):
+    def assign_roles():
+        yield SYSTEM_TOKEN, SAIGA_SYSTEM_TOKENS
+        for index, message_tokens in enumerate(messages_tokens):
+            if index % 2 == 0:
+                yield USER_TOKEN, message_tokens
+            else:
+                yield BOT_TOKEN, message_tokens
+
+    for role_token, message_tokens in assign_roles():
+        yield from [BOS_TOKEN, role_token, NL_TOKEN]
+        yield from message_tokens + [EOS_TOKEN, NL_TOKEN]
     yield from [BOS_TOKEN, BOT_TOKEN, NL_TOKEN]
 
 
@@ -324,15 +331,21 @@ async def stream_sent(response, data):
     await response.write(bytes + b'\r\n')
 
 
-async def complete_handler(request):
+async def chat_complete_handler(request):
     text = await request.text()
     data = safe_json_loads(text)
     if type(data) is not dict:
         raise web.HTTPBadRequest(text=f'{text!r}, json dict required')
 
-    prompt = data.get('prompt')
-    if type(prompt) is not str:
-        raise web.HTTPBadRequest(text=f'prompt={prompt!r}, str required')
+    messages = data.get('messages')
+    if not (
+            type(messages) is list
+            and all(type(_) is str for _ in messages)
+    ):
+        raise web.HTTPBadRequest(text=f'messages={messages!r}, list of str required')
+
+    if len(messages) % 2 != 1:
+        raise web.HTTPBadRequest(text=f'len(messages)={len(messages)}, odd len required')
 
     model = data.get('model')
     if type(model) is not str:
@@ -351,9 +364,13 @@ async def complete_handler(request):
     if type(temperature) not in (int, float) or not 0 <= temperature <= 1:
         raise web.HTTPBadRequest(text=f'temperature={temperature!r}, float in [0, 1] required')
 
+    stop = model_params.get('stop')
+    if stop is not None and type(stop) is not str:
+        raise web.HTTPBadRequest(text=f'stop={stop!r}, str required')
+
     log(
-        'complete start',
-        prompt=prompt, model=model,
+        'chat complete request',
+        messages=messages, model=model,
         max_tokens=max_tokens, temperature=temperature
     )
 
@@ -362,10 +379,10 @@ async def complete_handler(request):
 
     with llama_ctx_manager(model_params['path'], n_ctx) as ctx:
         try:
-            tokens = llama_tokenize(ctx, prompt)
-            tokens = list(saiga_prompt_tokens(tokens))
+            messages_tokens = (llama_tokenize(ctx, _) for _ in messages)
+            prompt_tokens = list(saiga_prompt_tokens(messages_tokens))
             records = llama_complete(
-                ctx, tokens,
+                ctx, prompt_tokens,
                 n_batch=model_params['n_batch'],
                 n_threads=model_params['n_threads'],
                 n_predict=max_tokens,
@@ -375,8 +392,6 @@ async def complete_handler(request):
                 repeat_penalty=1.1,
                 repeat_last_n=64
             )
-            
-            stop = model_params.get('stop')
             if stop:
                 records = match_stop(records, stop)
 
@@ -403,7 +418,7 @@ def main():
     app.add_routes([
         web.get('/v1/models', models_handler),
         web.post('/v1/tokenize', tokenize_handler),
-        web.post('/v1/complete', complete_handler)
+        web.post('/v1/chat_complete', chat_complete_handler)
     ])
     log('run app', host=HOST, port=PORT)
     web.run_app(app, host=HOST, port=PORT, print=None)
